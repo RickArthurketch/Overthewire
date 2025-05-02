@@ -1,0 +1,64 @@
+0→1 : Lire readme
+  cat readme
+
+1→2 : Lire fichier spécial (-)
+  cat ./-
+
+2→3 : Lire fichier avec espaces
+  cat "fichier avec espaces"
+
+3→4 : Lire fichier caché
+  ls -la
+  cat .hidden
+
+4→5 : Trouver fichier ASCII
+  file inhere/*
+  cat inhere/-file07
+
+5→6 : Fichier avec permissions
+  find . -readable -executable -user bandit5 -group bandit6
+
+6→7 : Fichier de 33 octets
+  find / -size 33c -user bandit7 -group bandit6 2>/dev/null
+
+7→8 : Extraire ligne spécifique
+  grep millionth data.txt
+
+8→9 : Strings dans binaire
+  strings data.txt | grep "=="
+
+9→10 : Décoder Base64
+  base64 -d data.txt
+
+10→11 : Décompresser fichiers multiples
+  xxd -r data.txt > data.bin
+  file data.bin
+
+11→12 : Clé SSH
+  chmod 600 sshkey.private
+  ssh -i sshkey.private bandit12@localhost
+
+12→13 : Compression multiple
+  # Voir 10→11
+
+13→14 : Déchiffrement OpenSSL
+  openssl -d data.txt
+
+14→15 : Envoyer mot de passe via port
+  echo "#motdepasse" | nc localhost 30000
+
+15→16 : Connexion SSL
+  openssl s_client -connect localhost:30001 -quiet
+  # Coller le mot de passe
+
+16→17 : Lire mot de passe système
+  cat /etc/bandit_pass/bandit16
+
+17→18 : Comparer fichiers
+  diff passwords.old passwords.new
+
+18→19 : Contourner shell fermé
+  ssh bandit18@... -p 2220 "cat readme"
+
+19→20 : Exploiter SUID
+  ./bandit20-do cat /etc/bandit_pass/bandit20
