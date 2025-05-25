@@ -22,3 +22,6 @@
 - [Leviathan (Terminé)](https://overthewire.org/wargames/leviathan/)  
 - [Krypton (Terminé)](https://overthewire.org/wargames/krypton/)  
 - [Natas (En cours)](https://overthewire.org/wargames/natas/)
+
+🌐 **Profil public :**  
+- [Mon classement WeChall (RickA2025)](https://www.wechall.net/profile/RickA2025)
