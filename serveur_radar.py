@@ -1,29 +1,51 @@
-import socket
+import asyncio
 import json
-import time
 import random
+from bless import (
+    BlessServer,
+    GATTCharacteristicProperties,
+    GATTAttributePermissions
+)
 
-# Remplace par l'adresse IP exacte de ton casque Quest 3
-IP_QUEST = "10.197.141.96" 
-PORT = 5000
+# Ces UUIDs sont identiques à ceux de ton pont Java (BLEBridge.java)
+SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0"
+CHAR_UUID    = "12345678-1234-5678-1234-56789abcdef1"
 
-# Création du socket UDP
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-print(f"Envoi UDP démarré vers {IP_QUEST}:{PORT}...")
+async def run(server):
+    await server.start()
+    print("Serveur BLE actif. En attente de la connexion du Quest 3...")
 
-try:
     while True:
-        # Simulation de la donnée
-        respiration_val = random.uniform(5.0, 40.0)
+        # Génération d'une valeur de respiration simulée (entre 5 et 40)
+        respiration_val = random.uniform(5.0, 40.0) 
+        
+        # Création du JSON attendu par ton script C#
         data = {"respiration": round(respiration_val, 1)}
         json_str = json.dumps(data)
+        
+        # Mise à jour de la donnée sur le canal Bluetooth
+        server.get_characteristic(CHAR_UUID).value = json_str.encode('utf-8')
+        
+        print(f"Envoi BLE : {json_str}")
+        
+        # Pause de 0.05 seconde (environ 20 envois par seconde)
+        await asyncio.sleep(0.05) 
 
-        # Envoi direct du paquet UDP
-        sock.sendto(json_str.encode('utf-8'), (IP_QUEST, PORT))
-        print(f"Envoyé : {json_str}")
+# Configuration du serveur BLE
+loop = asyncio.get_event_loop()
+server = BlessServer(name="Radar_Quest", loop=loop)
 
-        # Pause pour limiter à 20 envois par seconde
-        time.sleep(0.05) 
+server.add_new_service(SERVICE_UUID)
+server.add_new_characteristic(
+    SERVICE_UUID,
+    CHAR_UUID,
+    (GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify),
+    json.dumps({"respiration": 0}).encode('utf-8'),
+    (GATTAttributePermissions.readable | GATTAttributePermissions.writeable)
+)
+
+# Lancement du script
+try:
+    loop.run_until_complete(run(server))
 except KeyboardInterrupt:
-    print("\nArrêt du serveur UDP.")
-    sock.close()
+    print("\nArrêt du serveur BLE.")
