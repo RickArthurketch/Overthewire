@@ -7,7 +7,6 @@ from bless import (
     GATTAttributePermissions
 )
 
-# Toujours nos identifiants de connexion
 SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0"
 CHAR_UUID    = "12345678-1234-5678-1234-56789abcdef1"
 
@@ -15,7 +14,7 @@ async def run(loop):
     # On initialise le serveur ici
     server = BlessServer(name="Radar_Quest", loop=loop)
 
-    # NOUVEAU : On ajoute les "await" qui manquaient pour créer les canaux
+    # L'ERREUR VENAIT D'ICI : Il manquait les "await" devant ces deux lignes
     await server.add_new_service(SERVICE_UUID)
     await server.add_new_characteristic(
         SERVICE_UUID,
@@ -27,7 +26,7 @@ async def run(loop):
 
     # On démarre le serveur
     await server.start()
-    print("Serveur BLE actif. En attente de la connexion du téléphone/Quest 3...")
+    print("Serveur BLE actif. En attente de la connexion du téléphone...")
 
     # Boucle d'envoi des données
     while True:
