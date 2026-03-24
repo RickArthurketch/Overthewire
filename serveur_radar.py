@@ -34,10 +34,16 @@ async def run(loop):
         data = {"respiration": round(respiration_val, 1)}
         json_str = json.dumps(data)
         
+        # 1. Modifie la valeur locale de la caractéristique
         server.get_characteristic(CHAR_UUID).value = json_str.encode('utf-8')
+        
+        # 2. LA LIGNE MANQUANTE : Déclenche l'envoi de la notification au téléphone
+        server.update_value(SERVICE_UUID, CHAR_UUID)
+        
         print(f"Envoi BLE : {json_str}")
         
-        await asyncio.sleep(0.05) 
+        # 3. Pause de 0.2 seconde pour stabiliser la connexion Android
+        await asyncio.sleep(0.2) 
 
 # Lancement propre du script
 loop = asyncio.get_event_loop()
