@@ -1,35 +1,116 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" xmlns:horizonos="http://schemas.horizonos/sdk">
-  <uses-permission android:name="android.permission.BLUETOOTH" />
-  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="31" />
-  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="31" />
-  <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-  <application android:label="@string/app_name" android:icon="@mipmap/app_icon" android:allowBackup="false">
-    <!--Used when Application Entry is set to Activity, otherwise remove this activity block-->
-    <activity android:name="com.unity3d.player.UnityPlayerGameActivity" android:theme="@style/UnityThemeSelector">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-        <category android:name="com.oculus.intent.category.VR" />
-      </intent-filter>
-      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
-      <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
-    </activity>
-    <!--Used when Application Entry is set to GameActivity, otherwise remove this activity block-->
-    <activity android:name="com.unity3d.player.UnityPlayerGameActivity" android:theme="@style/BaseUnityGameActivityTheme">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-      </intent-filter>
-      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
-      <meta-data android:name="android.app.lib_name" android:value="game" />
-    </activity>
-    <meta-data android:name="com.oculus.ossplash.background" android:value="black" />
-    <meta-data android:name="com.oculus.telemetry.project_guid" android:value="8ec47c71-082d-42eb-a393-211d383d4cb3" />
-    <meta-data android:name="com.oculus.supportedDevices" android:value="quest|quest2|questpro|quest3|quest3s" tools:replace="android:value" />
-  </application>
-  <uses-feature android:name="android.hardware.vr.headtracking" android:version="1" android:required="true" />
-  <horizonos:uses-horizonos-sdk horizonos:minSdkVersion="60" horizonos:targetSdkVersion="85" />
-</manifest>
+package com.tonnom.vr;
+
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
+import android.content.Context;
+import android.os.Build;
+import com.unity3d.player.UnityPlayer;
+import java.util.UUID;
+
+public class BLEBridge {
+    private BluetoothGatt bluetoothGatt;
+    private Context context;
+    
+    private static final UUID SERVICE_UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef0");
+    private static final UUID CHAR_UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1");
+
+    public BLEBridge() {
+        this.context = UnityPlayer.currentActivity;
+    }
+
+    // Petite fonction pour envoyer du texte à l'écran Unity
+    private void envoyerDebug(String message) {
+        UnityPlayer.UnitySendMessage("RadarManager", "OnJavaDebug", message);
+    }
+
+    public void connectToRaspberry() {
+        BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+        BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
+
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            envoyerDebug("Erreur : Bluetooth désactivé sur le tel.");
+            return;
+        }
+
+        envoyerDebug("Java : Tentative de connexion...");
+        BluetoothDevice device = bluetoothAdapter.getRemoteDevice("2C:CF:67:E2:C6:0C");
+        
+        // C'EST ICI LE CORRECTIF : On force le transport BLE pour Android 14
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+        } else {
+            bluetoothGatt = device.connectGatt(context, false, gattCallback);
+        }
+    }
+
+    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
+        @Override
+        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                // Si la connexion plante, on affiche le code d'erreur (ex: erreur 133 très connue)
+                envoyerDebug("Erreur GATT status : " + status);
+                return;
+            }
+
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                envoyerDebug("Java : Connecté ! Découverte...");
+                gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+                gatt.discoverServices();
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                envoyerDebug("Java : Appareil déconnecté.");
+            }
+        }
+
+        @Override
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                envoyerDebug("Java : Services trouvés !");
+                BluetoothGattCharacteristic characteristic = gatt.getService(SERVICE_UUID).getCharacteristic(CHAR_UUID);
+                
+                if (characteristic != null) {
+                    // 1. On ouvre l'écoute locale sur le téléphone
+                    gatt.setCharacteristicNotification(characteristic, true);
+                    
+                    // 2. LE CORRECTIF : On dit à la Raspberry de commencer à envoyer
+                    UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+                    android.bluetooth.BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
+                    
+                    if (descriptor != null) {
+                        descriptor.setValue(android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                        gatt.writeDescriptor(descriptor);
+                        envoyerDebug("Java : Écoute + Descriptor OK !");
+                    } else {
+                        envoyerDebug("Erreur : Descriptor introuvable.");
+                    }
+                } else {
+                    envoyerDebug("Erreur : Caractéristique introuvable.");
+                }
+            }
+        }
+
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            byte[] data = characteristic.getValue();
+            if (data != null && data.length > 0) {
+                String jsonString = new String(data);
+                
+                // AJOUTE CETTE LIGNE : Affiche le JSON brut sur l'écran du téléphone
+                envoyerDebug("Reçu : " + jsonString);
+                
+                UnityPlayer.UnitySendMessage("RadarManager", "OnDataReceived", jsonString);
+            }
+        }
+    };
+
+    public void disconnect() {
+        if (bluetoothGatt != null) {
+            bluetoothGatt.close();
+            bluetoothGatt = null;
+        }
+    }
+}
