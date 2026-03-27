@@ -1,105 +1,105 @@
-package com.tonnom.vr;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.Android;
+using UnityEngine.UI;
 
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
-import android.content.Context;
-import android.os.Build;
-import com.unity3d.player.UnityPlayer;
-import java.util.UUID;
+[System.Serializable]
+public class RadarData
+{
+    public float respiration;
+}
 
-public class BLEBridge {
-    private BluetoothGatt bluetoothGatt;
-    private Context context;
+public class RadarManager : MonoBehaviour
+{
+    private AndroidJavaObject bleBridge;
     
-    private static final UUID SERVICE_UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef0");
-    private static final UUID CHAR_UUID = UUID.fromString("12345678-1234-5678-1234-56789abcdef1");
+    [Header("--- UI et 3D ---")]
+    public Text texteRespiration;
+    public Transform sphereTransform;
 
-    public BLEBridge() {
-        this.context = UnityPlayer.currentActivity;
+    [Header("--- Paramètres ---")]
+    public float valeurCapteurMin = 5f;
+    public float valeurCapteurMax = 40f;
+    public float tailleBouleMin = 0.5f;
+    public float tailleBouleMax = 2.5f;
+
+    private float derniereValeur = 0f;
+    private string debugMsg = "Démarrage Quest 3..."; 
+
+    void Start()
+    {
+        if (sphereTransform != null) sphereTransform.localScale = Vector3.one * tailleBouleMin;
+        if (Application.platform == RuntimePlatform.Android) StartCoroutine(InitBluetooth());
     }
 
-    private void envoyerDebug(String message) {
-        UnityPlayer.UnitySendMessage("RadarManager", "OnJavaDebug", message);
-    }
-
-    public void connectToRaspberry() {
-        BluetoothManager bluetoothManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
-        BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
-
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-            envoyerDebug("Erreur : Bluetooth désactivé sur le casque.");
-            return;
-        }
-
-        envoyerDebug("Java : Tentative de connexion...");
-        BluetoothDevice device = bluetoothAdapter.getRemoteDevice("30:E3:A4:CF:80:72");
+    private IEnumerator InitBluetooth()
+    {
+        debugMsg = "Vérification permissions...";
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
-        } else {
-            bluetoothGatt = device.connectGatt(context, false, gattCallback);
+        if (!Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_CONNECT") || 
+            !Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_SCAN"))
+        {
+            debugMsg = "Attente validation permissions...";
+            Permission.RequestUserPermission("android.permission.BLUETOOTH_CONNECT");
+            Permission.RequestUserPermission("android.permission.BLUETOOTH_SCAN");
+            
+            while (!Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_CONNECT"))
+            {
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        debugMsg = "Permissions OK. Lancement Java...";
+        try 
+        {
+            bleBridge = new AndroidJavaObject("com.tonnom.vr.BLEBridge");
+            bleBridge.Call("connectToRaspberry");
+        } 
+        catch (System.Exception e) 
+        {
+            debugMsg = "Erreur Java: " + e.Message;
         }
     }
 
-    private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                envoyerDebug("Erreur GATT status : " + status);
-                return;
-            }
+    public void OnJavaDebug(string message)
+    {
+        debugMsg = message;
+    }
 
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                envoyerDebug("Java : Connecté ! Découverte...");
-                gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
-                gatt.discoverServices();
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                envoyerDebug("Java : Appareil déconnecté.");
-            }
+    public void OnDataReceived(string jsonString)
+    {
+        try 
+        {
+            RadarData data = JsonUtility.FromJson<RadarData>(jsonString);
+            derniereValeur = data.respiration;
+        } 
+        catch 
+        {
+            debugMsg = "Erreur lecture JSON";
         }
+    }
 
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                BluetoothGattCharacteristic characteristic = gatt.getService(SERVICE_UUID).getCharacteristic(CHAR_UUID);
-                
-                if (characteristic != null) {
-                    gatt.setCharacteristicNotification(characteristic, true);
-                    UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-                    android.bluetooth.BluetoothGattDescriptor descriptor = characteristic.getDescriptor(CCCD_UUID);
-                    
-                    if (descriptor != null) {
-                        descriptor.setValue(android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                        gatt.writeDescriptor(descriptor);
-                        envoyerDebug("Java : Écoute + Descriptor OK !");
-                    } else {
-                        envoyerDebug("Erreur : Descriptor introuvable.");
-                    }
-                } else {
-                    envoyerDebug("Erreur : Caractéristique introuvable.");
-                }
+    void Update()
+    {
+        if (texteRespiration != null)
+        {
+            if (derniereValeur > 0) {
+                texteRespiration.text = "Respiration : " + derniereValeur.ToString("F1");
+            } else {
+                texteRespiration.text = debugMsg;
             }
         }
 
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            byte[] data = characteristic.getValue();
-            if (data != null && data.length > 0) {
-                String jsonString = new String(data);
-                UnityPlayer.UnitySendMessage("RadarManager", "OnDataReceived", jsonString);
-            }
+        if (sphereTransform != null && derniereValeur > 0)
+        {
+            float t = Mathf.InverseLerp(valeurCapteurMin, valeurCapteurMax, derniereValeur);
+            float taille = Mathf.Lerp(tailleBouleMin, tailleBouleMax, t);
+            sphereTransform.localScale = new Vector3(taille, taille, taille);
         }
-    };
+    }
 
-    public void disconnect() {
-        if (bluetoothGatt != null) {
-            bluetoothGatt.close();
-            bluetoothGatt = null;
-        }
+    void OnDestroy()
+    {
+        if (bleBridge != null) bleBridge.Call("disconnect");
     }
 }
