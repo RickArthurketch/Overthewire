@@ -1,105 +1,24 @@
-using System.Collections;
-using UnityEngine;
-using UnityEngine.Android;
-using UnityEngine.UI;
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <application>
+    <activity android:name="com.unity3d.player.UnityPlayerActivity" android:theme="@style/UnityThemeSelector" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+        <category android:name="android.intent.category.INFO" />
+        <category android:name="com.oculus.intent.category.VR" />
+      </intent-filter>
+      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+    </activity>
+  </application>
 
-[System.Serializable]
-public class RadarData
-{
-    public float respiration;
-}
+  <uses-permission android:name="android.permission.BLUETOOTH" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
-public class RadarManager : MonoBehaviour
-{
-    private AndroidJavaObject bleBridge;
-    
-    [Header("--- UI et 3D ---")]
-    public Text texteRespiration;
-    public Transform sphereTransform;
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="31" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="31" />
 
-    [Header("--- Paramètres ---")]
-    public float valeurCapteurMin = 5f;
-    public float valeurCapteurMax = 40f;
-    public float tailleBouleMin = 0.5f;
-    public float tailleBouleMax = 2.5f;
-
-    private float derniereValeur = 0f;
-    private string debugMsg = "Démarrage Quest 3..."; 
-
-    void Start()
-    {
-        if (sphereTransform != null) sphereTransform.localScale = Vector3.one * tailleBouleMin;
-        if (Application.platform == RuntimePlatform.Android) StartCoroutine(InitBluetooth());
-    }
-
-    private IEnumerator InitBluetooth()
-    {
-        debugMsg = "Vérification permissions...";
-        
-        if (!Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_CONNECT") || 
-            !Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_SCAN"))
-        {
-            debugMsg = "Attente validation permissions...";
-            Permission.RequestUserPermission("android.permission.BLUETOOTH_CONNECT");
-            Permission.RequestUserPermission("android.permission.BLUETOOTH_SCAN");
-            
-            while (!Permission.HasUserAuthorizedPermission("android.permission.BLUETOOTH_CONNECT"))
-            {
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        debugMsg = "Permissions OK. Lancement Java...";
-        try 
-        {
-            bleBridge = new AndroidJavaObject("com.tonnom.vr.BLEBridge");
-            bleBridge.Call("connectToRaspberry");
-        } 
-        catch (System.Exception e) 
-        {
-            debugMsg = "Erreur Java: " + e.Message;
-        }
-    }
-
-    public void OnJavaDebug(string message)
-    {
-        debugMsg = message;
-    }
-
-    public void OnDataReceived(string jsonString)
-    {
-        try 
-        {
-            RadarData data = JsonUtility.FromJson<RadarData>(jsonString);
-            derniereValeur = data.respiration;
-        } 
-        catch 
-        {
-            debugMsg = "Erreur lecture JSON";
-        }
-    }
-
-    void Update()
-    {
-        if (texteRespiration != null)
-        {
-            if (derniereValeur > 0) {
-                texteRespiration.text = "Respiration : " + derniereValeur.ToString("F1");
-            } else {
-                texteRespiration.text = debugMsg;
-            }
-        }
-
-        if (sphereTransform != null && derniereValeur > 0)
-        {
-            float t = Mathf.InverseLerp(valeurCapteurMin, valeurCapteurMax, derniereValeur);
-            float taille = Mathf.Lerp(tailleBouleMin, tailleBouleMax, t);
-            sphereTransform.localScale = new Vector3(taille, taille, taille);
-        }
-    }
-
-    void OnDestroy()
-    {
-        if (bleBridge != null) bleBridge.Call("disconnect");
-    }
-}
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+  <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
+</manifest>
