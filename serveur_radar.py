@@ -1,16 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
-  <application>
-    <activity android:name="com.unity3d.player.UnityPlayerActivity" android:theme="@style/UnityThemeSelector" android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-        <category android:name="android.intent.category.INFO" />
-        <category android:name="com.oculus.intent.category.VR" />
-      </intent-filter>
-      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
-    </activity>
-  </application>
 
   <uses-permission android:name="android.permission.BLUETOOTH" />
   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
@@ -20,5 +9,5 @@
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="31" />
 
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-  <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
+
 </manifest>
