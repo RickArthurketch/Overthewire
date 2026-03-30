@@ -1,91 +1,81 @@
-import asyncio
+using UnityEngine;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
 
-import json
+[System.Serializable]
+public class RadarData
+{
+    public float rr;
+    public float hr;
+    public float hr_brut;
+    public float snr_hr;
+    public float prom_hr;
+    public float hr_ref_hz;
+    public int bin;
+}
 
-import random
+public class UdpReceiver : MonoBehaviour
+{
+    public BreathingLightController lightController;
+    public int port = 6000; 
 
-from bless import (
+    private UdpClient udpClient;
+    private Thread receiveThread;
+    private bool isRunning = true;
 
-    BlessServer,
+    private float derniereRespiration = 15f;
+    private bool nouvelleDonnee = false;
 
-    GATTCharacteristicProperties,
+    void Start()
+    {
+        receiveThread = new Thread(new ThreadStart(ReceiveData));
+        receiveThread.IsBackground = true;
+        receiveThread.Start();
+        Debug.Log("Écoute UDP prête sur le port " + port);
+    }
 
-    GATTAttributePermissions
+    void Update()
+    {
+        if (nouvelleDonnee && lightController != null)
+        {
+            lightController.simulatedBreathingRate = derniereRespiration;
+            nouvelleDonnee = false;
+        }
+    }
 
-)
+    private void ReceiveData()
+    {
+        udpClient = new UdpClient(port);
+        IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, port);
 
+        while (isRunning)
+        {
+            try
+            {
+                byte[] data = udpClient.Receive(ref anyIP);
+                string jsonString = Encoding.UTF8.GetString(data);
+                
+                RadarData radarData = JsonUtility.FromJson<RadarData>(jsonString);
 
+                if (!float.IsNaN(radarData.rr))
+                {
+                    derniereRespiration = radarData.rr;
+                    nouvelleDonnee = true;
+                }
+            }
+            catch (System.Exception)
+            {
+                // Ignore les erreurs de fermeture de socket
+            }
+        }
+    }
 
-SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0"
-
-CHAR_UUID    = "12345678-1234-5678-1234-56789abcdef1"
-
-
-
-async def run(loop):
-
-    # On initialise le serveur ici
-
-    server = BlessServer(name="Radar_Quest", loop=loop)
-
-
-
-    # L'ERREUR VENAIT D'ICI : Il manquait les "await" devant ces deux lignes
-
-    await server.add_new_service(SERVICE_UUID)
-
-    await server.add_new_characteristic(
-
-        SERVICE_UUID,
-
-        CHAR_UUID,
-
-        (GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify),
-
-        json.dumps({"respiration": 0}).encode('utf-8'),
-
-        (GATTAttributePermissions.readable | GATTAttributePermissions.writeable)
-
-    )
-
-
-
-    # On démarre le serveur
-
-    await server.start()
-
-    print("Serveur BLE actif. En attente de la connexion du téléphone...")
-
-
-
-    # Boucle d'envoi des données
-
-    while True:
-        respiration_val = random.uniform(5.0, 40.0) 
-        data = {"respiration": round(respiration_val, 1)}
-        json_str = json.dumps(data)
-        
-        # 1. Modifie la valeur locale de la caractéristique
-        server.get_characteristic(CHAR_UUID).value = json_str.encode('utf-8')
-        
-        # 2. LA LIGNE MANQUANTE : Déclenche l'envoi de la notification au téléphone
-        server.update_value(SERVICE_UUID, CHAR_UUID)
-        
-        print(f"Envoi BLE : {json_str}")
-        
-        # 3. Pause de 0.2 seconde pour stabiliser la connexion Android
-        await asyncio.sleep(0.2)
-
-
-
-# Lancement propre du script
-
-loop = asyncio.get_event_loop()
-
-try:
-
-    loop.run_until_complete(run(loop))
-
-except KeyboardInterrupt:
-
-    print("\nArrêt du serveur BLE.") 
+    void OnDestroy()
+    {
+        isRunning = false;
+        if (udpClient != null) udpClient.Close();
+        if (receiveThread != null) receiveThread.Abort();
+    }
+}
