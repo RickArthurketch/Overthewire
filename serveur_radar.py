@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using TMPro; // Nécessaire pour contrôler le texte
 
 [System.Serializable]
 public class RadarData
@@ -19,6 +20,7 @@ public class RadarData
 public class UdpReceiver : MonoBehaviour
 {
     public BreathingLightController lightController;
+    public TextMeshProUGUI affichageTexte; // Ta nouvelle case d'affichage
     public int port = 6000; 
 
     private UdpClient udpClient;
@@ -26,6 +28,7 @@ public class UdpReceiver : MonoBehaviour
     private bool isRunning = true;
 
     private float derniereRespiration = 15f;
+    private float dernierRythmeCardiaque = 0f;
     private bool nouvelleDonnee = false;
 
     void Start()
@@ -33,14 +36,24 @@ public class UdpReceiver : MonoBehaviour
         receiveThread = new Thread(new ThreadStart(ReceiveData));
         receiveThread.IsBackground = true;
         receiveThread.Start();
-        Debug.Log("Écoute UDP prête sur le port " + port);
     }
 
     void Update()
     {
-        if (nouvelleDonnee && lightController != null)
+        if (nouvelleDonnee)
         {
-            lightController.simulatedBreathingRate = derniereRespiration;
+            // Met à jour la lumière
+            if (lightController != null)
+            {
+                lightController.simulatedBreathingRate = derniereRespiration;
+            }
+
+            // Met à jour le texte dans la scène
+            if (affichageTexte != null)
+            {
+                affichageTexte.text = $"Respiration : {derniereRespiration:F1} rpm\nCardiaque : {dernierRythmeCardiaque:F1} bpm";
+            }
+
             nouvelleDonnee = false;
         }
     }
@@ -62,13 +75,11 @@ public class UdpReceiver : MonoBehaviour
                 if (!float.IsNaN(radarData.rr))
                 {
                     derniereRespiration = radarData.rr;
+                    dernierRythmeCardiaque = radarData.hr; // On enregistre le coeur
                     nouvelleDonnee = true;
                 }
             }
-            catch (System.Exception)
-            {
-                // Ignore les erreurs de fermeture de socket
-            }
+            catch (System.Exception) {}
         }
     }
 
