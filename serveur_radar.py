@@ -1,40 +1,26 @@
-using UnityEngine;
-
-public class LightController : MonoBehaviour
+private void ReceiveData()
 {
-    public Light lumiere;
+    udpClient = new UdpClient(port);
+    IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, port);
 
-    [Header("Limites de respiration")]
-    public float seuilBas = 12f;
-    public float seuilHaut = 25f;
-
-    [Header("Intensités lumineuses")]
-    public float intensiteMin = 0.2f; // Pièce sombre si respiration lente
-    public float intensiteMax = 2.0f; // Pièce très claire si respiration rapide
-    
-    public float vitesseTransition = 2f;
-
-    private float respirationActuelle = 15f;
-
-    void Start()
+    while (isRunning)
     {
-        if (lumiere == null) lumiere = GetComponent<Light>();
-    }
+        try
+        {
+            byte[] data = udpClient.Receive(ref anyIP);
+            string jsonString = Encoding.UTF8.GetString(data);
+            
+            // CETTE LIGNE VA TOUT NOUS DIRE
+            Debug.Log("Message reçu de la Raspberry : " + jsonString);
+            
+            DonneesRadar radarData = JsonUtility.FromJson<DonneesRadar>(jsonString);
 
-    public void MettreAJourRespiration(float nouvelleValeur)
-    {
-        respirationActuelle = nouvelleValeur;
-    }
-
-    void Update()
-    {
-        // Calcule le pourcentage d'effort entre le seuil bas et haut
-        float pourcentage = Mathf.InverseLerp(seuilBas, seuilHaut, respirationActuelle);
-        
-        // Déduit l'intensité correspondante
-        float intensiteCible = Mathf.Lerp(intensiteMin, intensiteMax, pourcentage);
-
-        // Applique le changement en douceur
-        lumiere.intensity = Mathf.Lerp(lumiere.intensity, intensiteCible, Time.deltaTime * vitesseTransition);
+            if (!float.IsNaN(radarData.rr))
+            {
+                derniereRespiration = radarData.rr;
+                nouvelleDonnee = true;
+            }
+        }
+        catch (System.Exception) {}
     }
 }
