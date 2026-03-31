@@ -1,42 +1,31 @@
-using UnityEngine;
+import socket
+import json
+import time
+import random
 
-public class BreathingLightController : MonoBehaviour
-{
-    public Light directionalLight;
+# À modifier avec l'adresse IP de ton Quest 3
+IP_QUEST = "192.168.1.100" 
+PORT = 6000
 
-    [Header("Donn�es Radar")]
-    public float simulatedBreathingRate = 15f;
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+print(f"Envoi des données aléatoires vers {IP_QUEST}:{PORT}...")
 
-    [Header("Seuils de Respiration")]
-    public float seuilBas = 14f;  // Cal� sur la respiration au repos
-    public float seuilHaut = 36f; // Cal� sur l'effort max des squats
-
-    [Header("Rendu Visuel")]
-    public float intensiteRepos = 0.5f;
-    public float intensiteEffort = 2.5f;
-
-    public Color couleurRepos = Color.white;
-    public Color couleurEffort = new Color(1f, 0.8f, 0.6f); // Une teinte un peu plus chaude pour l'effort
-
-    public float vitesseTransition = 3f;
-
-    void Start()
-    {
-        if (directionalLight == null) directionalLight = GetComponent<Light>();
-        directionalLight.type = LightType.Directional;
-    }
-
-    void Update()
-    {
-        // 1. D�termine o� on se situe entre le repos (0) et l'effort max (1)
-        float pourcentageEffort = Mathf.InverseLerp(seuilBas, seuilHaut, simulatedBreathingRate);
-
-        // 2. D�duit l'intensit� et la couleur exactes pour cet instant pr�cis
-        float intensiteCible = Mathf.Lerp(intensiteRepos, intensiteEffort, pourcentageEffort);
-        Color couleurCible = Color.Lerp(couleurRepos, couleurEffort, pourcentageEffort);
-
-        // 3. Applique la modification en douceur pour �viter les saccades
-        directionalLight.intensity = Mathf.Lerp(directionalLight.intensity, intensiteCible, Time.deltaTime * vitesseTransition);
-        directionalLight.color = Color.Lerp(directionalLight.color, couleurCible, Time.deltaTime * vitesseTransition);
-    }
-}
+try:
+    while True:
+        # Génère une respiration aléatoire entre 12.0 et 25.0
+        respiration_aleatoire = round(random.uniform(12.0, 25.0), 1)
+        
+        # Crée le paquet JSON
+        payload = {"rr": respiration_aleatoire}
+        message = json.dumps(payload).encode("utf-8")
+        
+        # Envoie le paquet
+        sock.sendto(message, (IP_QUEST, PORT))
+        print(f"Envoyé : {payload}")
+        
+        # Pause d'une demi-seconde
+        time.sleep(0.5) 
+        
+except KeyboardInterrupt:
+    print("\nArrêt du programme.")
+    sock.close()
