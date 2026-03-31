@@ -1,92 +1,68 @@
 using UnityEngine;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-using TMPro; // Nécessaire pour contrôler le texte
+using TMPro;
 
-[System.Serializable]
-public class RadarData
-{
-    public float rr;
-    public float hr;
-    public float hr_brut;
-    public float snr_hr;
-    public float prom_hr;
-    public float hr_ref_hz;
-    public int bin;
-}
-
-public class UdpReceiver : MonoBehaviour
+public class SquatSimulator : MonoBehaviour
 {
     public BreathingLightController lightController;
-    public TextMeshProUGUI affichageTexte; // Ta nouvelle case d'affichage
-    public int port = 6000; 
+    public TextMeshProUGUI affichageTexte;
 
-    private UdpClient udpClient;
-    private Thread receiveThread;
-    private bool isRunning = true;
-
-    private float derniereRespiration = 15f;
-    private float dernierRythmeCardiaque = 0f;
-    private bool nouvelleDonnee = false;
-
-    void Start()
+    [System.Serializable]
+    public struct Etape
     {
-        receiveThread = new Thread(new ThreadStart(ReceiveData));
-        receiveThread.IsBackground = true;
-        receiveThread.Start();
+        public float temps;
+        public float hr; // Rythme cardiaque
+        public float rr; // Respiration
     }
+
+    // Le tableau des valeurs (Repos -> Squats -> R�cup�ration)
+    public Etape[] scenario = new Etape[] {
+        new Etape { temps = 0f, hr = 65f, rr = 14f },
+        new Etape { temps = 15f, hr = 66f, rr = 14f },
+        new Etape { temps = 30f, hr = 85f, rr = 22f },
+        new Etape { temps = 45f, hr = 125f, rr = 30f },
+        new Etape { temps = 60f, hr = 150f, rr = 36f },
+        new Etape { temps = 75f, hr = 130f, rr = 28f },
+        new Etape { temps = 90f, hr = 105f, rr = 22f },
+        new Etape { temps = 110f, hr = 85f, rr = 18f },
+        new Etape { temps = 130f, hr = 75f, rr = 15f },
+        new Etape { temps = 150f, hr = 68f, rr = 14f }
+    };
+
+    private float chronometre = 0f;
+    private float dureeTotale = 150f;
 
     void Update()
     {
-        if (nouvelleDonnee)
+        // Fait avancer le temps
+        chronometre += Time.deltaTime;
+
+        // Recommence � z�ro une fois le sc�nario termin�
+        if (chronometre > dureeTotale) chronometre = 0f;
+
+        // Cherche dans quelle phase on se trouve pour calculer les valeurs exactes
+        for (int i = 0; i < scenario.Length - 1; i++)
         {
-            // Met à jour la lumière
-            if (lightController != null)
+            if (chronometre >= scenario[i].temps && chronometre <= scenario[i + 1].temps)
             {
-                lightController.simulatedBreathingRate = derniereRespiration;
-            }
+                float progression = (chronometre - scenario[i].temps) / (scenario[i + 1].temps - scenario[i].temps);
 
-            // Met à jour le texte dans la scène
-            if (affichageTexte != null)
-            {
-                affichageTexte.text = $"Respiration : {derniereRespiration:F1} rpm\nCardiaque : {dernierRythmeCardiaque:F1} bpm";
-            }
+                float hrActuel = Mathf.Lerp(scenario[i].hr, scenario[i + 1].hr, progression);
+                float rrActuel = Mathf.Lerp(scenario[i].rr, scenario[i + 1].rr, progression);
 
-            nouvelleDonnee = false;
-        }
-    }
-
-    private void ReceiveData()
-    {
-        udpClient = new UdpClient(port);
-        IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, port);
-
-        while (isRunning)
-        {
-            try
-            {
-                byte[] data = udpClient.Receive(ref anyIP);
-                string jsonString = Encoding.UTF8.GetString(data);
-                
-                RadarData radarData = JsonUtility.FromJson<RadarData>(jsonString);
-
-                if (!float.IsNaN(radarData.rr))
+                // Envoie l'info � la lumi�re
+                if (lightController != null)
                 {
-                    derniereRespiration = radarData.rr;
-                    dernierRythmeCardiaque = radarData.hr; // On enregistre le coeur
-                    nouvelleDonnee = true;
+                    lightController.simulatedBreathingRate = rrActuel;
                 }
-            }
-            catch (System.Exception) {}
-        }
-    }
 
-    void OnDestroy()
-    {
-        isRunning = false;
-        if (udpClient != null) udpClient.Close();
-        if (receiveThread != null) receiveThread.Abort();
+                // Envoie l'info au texte
+                if (affichageTexte != null)
+                {
+                    affichageTexte.text = $"Respiration : {rrActuel:F1} rpm\nCardiaque : {hrActuel:F1} bpm";
+                }
+
+                break;
+            }
+        }
     }
 }
