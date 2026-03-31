@@ -1,68 +1,42 @@
 using UnityEngine;
-using TMPro;
 
-public class SquatSimulator : MonoBehaviour
+public class BreathingLightController : MonoBehaviour
 {
-    public BreathingLightController lightController;
-    public TextMeshProUGUI affichageTexte;
+    public Light directionalLight;
 
-    [System.Serializable]
-    public struct Etape
+    [Header("Donn�es Radar")]
+    public float simulatedBreathingRate = 15f;
+
+    [Header("Seuils de Respiration")]
+    public float seuilBas = 14f;  // Cal� sur la respiration au repos
+    public float seuilHaut = 36f; // Cal� sur l'effort max des squats
+
+    [Header("Rendu Visuel")]
+    public float intensiteRepos = 0.5f;
+    public float intensiteEffort = 2.5f;
+
+    public Color couleurRepos = Color.white;
+    public Color couleurEffort = new Color(1f, 0.8f, 0.6f); // Une teinte un peu plus chaude pour l'effort
+
+    public float vitesseTransition = 3f;
+
+    void Start()
     {
-        public float temps;
-        public float hr; // Rythme cardiaque
-        public float rr; // Respiration
+        if (directionalLight == null) directionalLight = GetComponent<Light>();
+        directionalLight.type = LightType.Directional;
     }
-
-    // Le tableau des valeurs (Repos -> Squats -> R�cup�ration)
-    public Etape[] scenario = new Etape[] {
-        new Etape { temps = 0f, hr = 65f, rr = 14f },
-        new Etape { temps = 15f, hr = 66f, rr = 14f },
-        new Etape { temps = 30f, hr = 85f, rr = 22f },
-        new Etape { temps = 45f, hr = 125f, rr = 30f },
-        new Etape { temps = 60f, hr = 150f, rr = 36f },
-        new Etape { temps = 75f, hr = 130f, rr = 28f },
-        new Etape { temps = 90f, hr = 105f, rr = 22f },
-        new Etape { temps = 110f, hr = 85f, rr = 18f },
-        new Etape { temps = 130f, hr = 75f, rr = 15f },
-        new Etape { temps = 150f, hr = 68f, rr = 14f }
-    };
-
-    private float chronometre = 0f;
-    private float dureeTotale = 150f;
 
     void Update()
     {
-        // Fait avancer le temps
-        chronometre += Time.deltaTime;
+        // 1. D�termine o� on se situe entre le repos (0) et l'effort max (1)
+        float pourcentageEffort = Mathf.InverseLerp(seuilBas, seuilHaut, simulatedBreathingRate);
 
-        // Recommence � z�ro une fois le sc�nario termin�
-        if (chronometre > dureeTotale) chronometre = 0f;
+        // 2. D�duit l'intensit� et la couleur exactes pour cet instant pr�cis
+        float intensiteCible = Mathf.Lerp(intensiteRepos, intensiteEffort, pourcentageEffort);
+        Color couleurCible = Color.Lerp(couleurRepos, couleurEffort, pourcentageEffort);
 
-        // Cherche dans quelle phase on se trouve pour calculer les valeurs exactes
-        for (int i = 0; i < scenario.Length - 1; i++)
-        {
-            if (chronometre >= scenario[i].temps && chronometre <= scenario[i + 1].temps)
-            {
-                float progression = (chronometre - scenario[i].temps) / (scenario[i + 1].temps - scenario[i].temps);
-
-                float hrActuel = Mathf.Lerp(scenario[i].hr, scenario[i + 1].hr, progression);
-                float rrActuel = Mathf.Lerp(scenario[i].rr, scenario[i + 1].rr, progression);
-
-                // Envoie l'info � la lumi�re
-                if (lightController != null)
-                {
-                    lightController.simulatedBreathingRate = rrActuel;
-                }
-
-                // Envoie l'info au texte
-                if (affichageTexte != null)
-                {
-                    affichageTexte.text = $"Respiration : {rrActuel:F1} rpm\nCardiaque : {hrActuel:F1} bpm";
-                }
-
-                break;
-            }
-        }
+        // 3. Applique la modification en douceur pour �viter les saccades
+        directionalLight.intensity = Mathf.Lerp(directionalLight.intensity, intensiteCible, Time.deltaTime * vitesseTransition);
+        directionalLight.color = Color.Lerp(directionalLight.color, couleurCible, Time.deltaTime * vitesseTransition);
     }
 }
