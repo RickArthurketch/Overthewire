@@ -1,71 +1,40 @@
 using UnityEngine;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
 
-[System.Serializable]
-public class DonneesRadar
+public class LightController : MonoBehaviour
 {
-    public float rr; 
-}
+    public Light lumiere;
 
-public class UdpReceiver : MonoBehaviour
-{
-    public LightController lightController;
-    public int port = 6000;
+    [Header("Limites de respiration")]
+    public float seuilBas = 12f;
+    public float seuilHaut = 25f;
 
-    private UdpClient udpClient;
-    private Thread receiveThread;
-    private bool isRunning = true;
+    [Header("Intensités lumineuses")]
+    public float intensiteMin = 0.2f; // Pièce sombre si respiration lente
+    public float intensiteMax = 2.0f; // Pièce très claire si respiration rapide
     
-    private float derniereRespiration = 15f;
-    private bool nouvelleDonnee = false;
+    public float vitesseTransition = 2f;
+
+    private float respirationActuelle = 15f;
 
     void Start()
     {
-        receiveThread = new Thread(new ThreadStart(ReceiveData));
-        receiveThread.IsBackground = true;
-        receiveThread.Start();
+        if (lumiere == null) lumiere = GetComponent<Light>();
+    }
+
+    public void MettreAJourRespiration(float nouvelleValeur)
+    {
+        respirationActuelle = nouvelleValeur;
     }
 
     void Update()
     {
-        if (nouvelleDonnee && lightController != null)
-        {
-            lightController.MettreAJourRespiration(derniereRespiration);
-            nouvelleDonnee = false;
-        }
-    }
+        // Calcule le pourcentage d'effort entre le seuil bas et haut
+        float pourcentage = Mathf.InverseLerp(seuilBas, seuilHaut, respirationActuelle);
+        
+        // Déduit l'intensité correspondante
+        float intensiteCible = Mathf.Lerp(intensiteMin, intensiteMax, pourcentage);
 
-    private void ReceiveData()
-    {
-        udpClient = new UdpClient(port);
-        IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, port);
-
-        while (isRunning)
-        {
-            try
-            {
-                byte[] data = udpClient.Receive(ref anyIP);
-                string jsonString = Encoding.UTF8.GetString(data);
-                
-                DonneesRadar radarData = JsonUtility.FromJson<DonneesRadar>(jsonString);
-
-                if (!float.IsNaN(radarData.rr))
-                {
-                    derniereRespiration = radarData.rr;
-                    nouvelleDonnee = true;
-                }
-            }
-            catch (System.Exception) {}
-        }
-    }
-
-    void OnDestroy()
-    {
-        isRunning = false;
-        if (udpClient != null) udpClient.Close();
-        if (receiveThread != null) receiveThread.Abort();
+        // Applique le changement en douceur
+        lumiere.intensity = Mathf.Lerp(lumiere.intensity, intensiteCible, Time.deltaTime * vitesseTransition);
     }
 }
