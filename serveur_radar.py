@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using TMPro; // Requis pour l'interface texte
 
 public class RespirationLightController : MonoBehaviour
 {
@@ -12,20 +11,23 @@ public class RespirationLightController : MonoBehaviour
 
     [Header("Configuration Lumière")]
     public Light roomLight;
-    public float minIntensity = 0.5f;
-    public float maxIntensity = 2.0f;
+    public float minIntensity = 0.8f;
+    public float maxIntensity = 1.8f;
     
-    [Header("Valeurs de Respiration Attendues")]
-    public float minRespiration = 12f;
-    public float maxRespiration = 25f;
+    [Header("Valeurs du Capteur (BPM)")]
+    public float minRespiration = 60f;
+    public float maxRespiration = 130f;
 
-    [Header("Affichage UI")]
-    public TextMeshProUGUI rateText; // Champ pour lier ton texte
+    [Header("Gestion des erreurs")]
+    public float timeoutDuration = 2.0f; // Temps en secondes avant d'assombrir la pièce
 
     private UdpClient udpClient;
     private Thread receiveThread;
     private bool isRunning = false;
-    private float currentRespirationRate = 15f;
+    
+    private float currentRespirationRate = 75f;
+    private float timeSinceLastData = 0f;
+    private bool newDataReceived = false;
 
     void Start()
     {
@@ -43,7 +45,6 @@ public class RespirationLightController : MonoBehaviour
         receiveThread.IsBackground = true;
         isRunning = true;
         receiveThread.Start();
-        Debug.Log($"Écoute UDP démarrée sur le port {port}");
     }
 
     private void ReceiveData()
@@ -61,6 +62,7 @@ public class RespirationLightController : MonoBehaviour
                 if (float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float rate))
                 {
                     currentRespirationRate = rate;
+                    newDataReceived = true; 
                 }
             }
             catch (System.Exception e)
@@ -72,16 +74,36 @@ public class RespirationLightController : MonoBehaviour
 
     void Update()
     {
-        // Mise à jour du texte à l'écran
-        if (rateText != null)
+        // Chronomètre pour vérifier la bonne réception des données
+        if (newDataReceived)
         {
-            rateText.text = $"Respiration : {currentRespirationRate:0.0} /min";
+            timeSinceLastData = 0f;
+            newDataReceived = false;
         }
+        else
+        {
+            timeSinceLastData += Time.deltaTime;
+        }
+
+        // Vérifie si le signal est perdu
+        bool isSignalLost = timeSinceLastData > timeoutDuration || currentRespirationRate <= 0f;
 
         if (roomLight == null) return;
 
-        float t = Mathf.InverseLerp(minRespiration, maxRespiration, currentRespirationRate);
-        float targetIntensity = Mathf.Lerp(minIntensity, maxIntensity, t);
+        float targetIntensity;
+
+        // Assombrit la pièce si le signal est perdu
+        if (isSignalLost)
+        {
+            targetIntensity = 0f;
+        }
+        else
+        {
+            float t = Mathf.InverseLerp(minRespiration, maxRespiration, currentRespirationRate);
+            targetIntensity = Mathf.Lerp(minIntensity, maxIntensity, t);
+        }
+
+        // Applique la transition de la lumière
         roomLight.intensity = Mathf.Lerp(roomLight.intensity, targetIntensity, Time.deltaTime * 3f);
     }
 
