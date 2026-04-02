@@ -1,30 +1,94 @@
-import socket
-import time
-import random
+using UnityEngine;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using TMPro; // Requis pour l'interface texte
 
-# Remplace par l'adresse IP de ton casque Quest 3
-IP_QUEST = "192.168.X.X" 
-PORT = 5005
+public class RespirationLightController : MonoBehaviour
+{
+    [Header("Configuration Réseau")]
+    public int port = 5005;
 
-# Création du socket UDP
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-print(f"Début de l'envoi des données vers {IP_QUEST}:{PORT}...")
+    [Header("Configuration Lumière")]
+    public Light roomLight;
+    public float minIntensity = 0.5f;
+    public float maxIntensity = 2.0f;
+    
+    [Header("Valeurs de Respiration Attendues")]
+    public float minRespiration = 12f;
+    public float maxRespiration = 25f;
 
-try:
-    while True:
-        # Génère une valeur flottante aléatoire entre 12.0 et 25.0
-        respiration = round(random.uniform(12.0, 25.0), 2)
-        
-        # Convertit le nombre en texte brut, comme attendu par ton script C#
-        message = str(respiration).encode("utf-8")
-        
-        # Envoie le message via le réseau
-        sock.sendto(message, (IP_QUEST, PORT))
-        print(f"Donnée envoyée : {respiration} rpm")
-        
-        # Pause d'une seconde avant le prochain envoi
-        time.sleep(1) 
-        
-except KeyboardInterrupt:
-    print("\nArrêt de l'émetteur.")
-    sock.close()
+    [Header("Affichage UI")]
+    public TextMeshProUGUI rateText; // Champ pour lier ton texte
+
+    private UdpClient udpClient;
+    private Thread receiveThread;
+    private bool isRunning = false;
+    private float currentRespirationRate = 15f;
+
+    void Start()
+    {
+        if (roomLight == null)
+        {
+            roomLight = GetComponent<Light>();
+        }
+
+        StartNetworkListener();
+    }
+
+    private void StartNetworkListener()
+    {
+        receiveThread = new Thread(new ThreadStart(ReceiveData));
+        receiveThread.IsBackground = true;
+        isRunning = true;
+        receiveThread.Start();
+        Debug.Log($"Écoute UDP démarrée sur le port {port}");
+    }
+
+    private void ReceiveData()
+    {
+        udpClient = new UdpClient(port);
+        IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, 0);
+
+        while (isRunning)
+        {
+            try
+            {
+                byte[] data = udpClient.Receive(ref anyIP);
+                string text = Encoding.UTF8.GetString(data);
+
+                if (float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float rate))
+                {
+                    currentRespirationRate = rate;
+                }
+            }
+            catch (System.Exception e)
+            {
+                if (isRunning) Debug.LogError("Erreur UDP : " + e.Message);
+            }
+        }
+    }
+
+    void Update()
+    {
+        // Mise à jour du texte à l'écran
+        if (rateText != null)
+        {
+            rateText.text = $"Respiration : {currentRespirationRate:0.0} /min";
+        }
+
+        if (roomLight == null) return;
+
+        float t = Mathf.InverseLerp(minRespiration, maxRespiration, currentRespirationRate);
+        float targetIntensity = Mathf.Lerp(minIntensity, maxIntensity, t);
+        roomLight.intensity = Mathf.Lerp(roomLight.intensity, targetIntensity, Time.deltaTime * 3f);
+    }
+
+    void OnApplicationQuit()
+    {
+        isRunning = false;
+        if (udpClient != null) udpClient.Close();
+        if (receiveThread != null && receiveThread.IsAlive) receiveThread.Abort();
+    }
+}
