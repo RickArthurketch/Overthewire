@@ -1,26 +1,30 @@
-private void ReceiveData()
-{
-    udpClient = new UdpClient(port);
-    IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, port);
+import socket
+import time
+import random
 
-    while (isRunning)
-    {
-        try
-        {
-            byte[] data = udpClient.Receive(ref anyIP);
-            string jsonString = Encoding.UTF8.GetString(data);
-            
-            // CETTE LIGNE VA TOUT NOUS DIRE
-            Debug.Log("Message reçu de la Raspberry : " + jsonString);
-            
-            DonneesRadar radarData = JsonUtility.FromJson<DonneesRadar>(jsonString);
+# Remplace par l'adresse IP de ton casque Quest 3
+IP_QUEST = "192.168.X.X" 
+PORT = 5005
 
-            if (!float.IsNaN(radarData.rr))
-            {
-                derniereRespiration = radarData.rr;
-                nouvelleDonnee = true;
-            }
-        }
-        catch (System.Exception) {}
-    }
-}
+# Création du socket UDP
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+print(f"Début de l'envoi des données vers {IP_QUEST}:{PORT}...")
+
+try:
+    while True:
+        # Génère une valeur flottante aléatoire entre 12.0 et 25.0
+        respiration = round(random.uniform(12.0, 25.0), 2)
+        
+        # Convertit le nombre en texte brut, comme attendu par ton script C#
+        message = str(respiration).encode("utf-8")
+        
+        # Envoie le message via le réseau
+        sock.sendto(message, (IP_QUEST, PORT))
+        print(f"Donnée envoyée : {respiration} rpm")
+        
+        # Pause d'une seconde avant le prochain envoi
+        time.sleep(1) 
+        
+except KeyboardInterrupt:
+    print("\nArrêt de l'émetteur.")
+    sock.close()
